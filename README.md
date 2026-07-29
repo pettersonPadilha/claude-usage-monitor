@@ -50,6 +50,34 @@ Sessão ●                  ← barra e ponto: laranja / amarelo (75%) / vermel
   45 min. Mostra `Zera antes` quando a janela reseta antes de estourar, e `—`
   enquanto não há amostras suficientes (logo após abrir o app).
 
+## Aviso de limite
+
+Quando uma janela cruza **80%**, o app manda uma notificação de desktop — útil
+quando o card está escondido ou atrás de outra janela.
+
+- Dispara **uma vez por ciclo**: ficar horas acima de 80% não gera aviso a cada
+  consulta. Rearma quando a janela zera (ou quando o uso cai abaixo do limiar,
+  para contas sem `resets_at`).
+- Sessão e semana avisam **de forma independente**.
+- Acima de 90% a notificação sai com urgência `critical`, que no GNOME fica na
+  tela até você fechar.
+- Ligar o aviso não gera aviso retroativo: se você ativar já acima do limiar, o
+  próximo cruzamento é que notifica.
+
+Mudar o limiar ou desligar:
+
+```bash
+./claude-usage-monitor --notify-threshold 90   # avisa em 90%
+./claude-usage-monitor --no-notify             # sem aviso
+```
+
+O menu (botão direito no card) tem **Alternar aviso de limite**, e as chaves
+`notify_enabled` / `notify_threshold` no `config.json` guardam a escolha.
+
+Usa libnotify quando disponível (aí o aviso da mesma janela é atualizado no
+lugar de empilhar), com fallback para o binário `notify-send` e, na falta dos
+dois, só uma linha de log — o app nunca depende deles.
+
 ## Requisitos
 
 - Linux com X11 ou XWayland (veja [Notas de plataforma](#notas-de-plataforma))
@@ -95,16 +123,18 @@ Sem ela o app funciona normalmente, só sem o ícone no painel (o log avisa).
 
 - **Arrastar** com o botão esquerdo em qualquer parte do card; a posição é lembrada.
 - **Botão direito** ou o ícone ☰ abre o menu: atualizar, mostrar/ocultar a linha
-  semanal, alternar "sempre no topo", esconder, sair.
+  semanal, alternar "sempre no topo", alternar o aviso de limite, esconder, sair.
 - **Fechar** apenas esconde a janela — para encerrar, use *Sair* no menu.
 
 Flags:
 
 ```bash
-./claude-usage-monitor --interval 120  # intervalo de consulta em segundos (mín. 60)
-./claude-usage-monitor --hidden        # inicia escondido (útil com o indicador)
-./claude-usage-monitor --no-tray       # sem indicador de painel
-./claude-usage-monitor --verbose       # log detalhado
+./claude-usage-monitor --interval 120       # intervalo de consulta em segundos (mín. 60)
+./claude-usage-monitor --hidden             # inicia escondido (útil com o indicador)
+./claude-usage-monitor --no-tray            # sem indicador de painel
+./claude-usage-monitor --no-notify          # sem aviso de limite
+./claude-usage-monitor --notify-threshold 90  # limiar do aviso em %
+./claude-usage-monitor --verbose            # log detalhado
 ```
 
 ## Arquivos
@@ -117,7 +147,8 @@ Flags:
 | `~/.local/share/icons/hicolor/*/apps/claude-usage-monitor.*` | ícones instalados |
 
 Chaves do `config.json`: `poll_seconds`, `always_on_top`, `show_week`,
-`start_hidden`, `enable_tray`, `show_in_taskbar`, `window_x`, `window_y`.
+`start_hidden`, `enable_tray`, `show_in_taskbar`, `notify_enabled`,
+`notify_threshold`, `window_x`, `window_y`.
 
 ### Limite da própria API de uso
 
@@ -136,16 +167,17 @@ claude_usage/
   api.py          cliente HTTP do endpoint de usage
   model.py        tipos do domínio + parsing do payload
   metrics.py      ritmo, deficit, burn rate, projeções (puro, testado)
+  alerts.py       decide quando avisar do limiar (puro, testado)
   history.py      amostras persistidas
   viewmodel.py    monta os textos exibidos
   poller.py       thread de polling
   app.py          orquestração
-  ui/             window.py, row.py, bar.py, tray.py, style.css
+  ui/             window.py, row.py, bar.py, tray.py, notify.py, style.css
 tools/
   preview.py      renderiza o card em PNG (com --live usa dados reais)
   make_icons.py   gera o conjunto de ícones do aplicativo
 icons/            ícones gerados (PNG 16-512 + SVG)
-tests/            69 testes unitários (unittest, sem dependências)
+tests/            92 testes unitários (unittest, sem dependências)
 ```
 
 ## Testes
@@ -154,8 +186,8 @@ tests/            69 testes unitários (unittest, sem dependências)
 python3 -m unittest discover -s tests -t .
 ```
 
-A lógica de cálculo (`metrics.py`) é pura e coberta por testes; a UI não é
-testada automaticamente.
+A lógica de cálculo (`metrics.py`) e a decisão dos avisos (`alerts.py`) são
+puras e cobertas por testes; a UI não é testada automaticamente.
 
 ## Notas de plataforma
 

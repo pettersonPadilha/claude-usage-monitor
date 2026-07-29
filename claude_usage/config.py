@@ -40,6 +40,11 @@ MAX_HISTORY_SAMPLES = 2000
 WARNING_THRESHOLD = 75.0
 CRITICAL_THRESHOLD = 90.0
 
+# --- Threshold alerts -------------------------------------------------------
+DEFAULT_NOTIFY_THRESHOLD = 80.0
+MIN_NOTIFY_THRESHOLD = 1.0
+MAX_NOTIFY_THRESHOLD = 100.0
+
 # --- User config ------------------------------------------------------------
 CONFIG_DIR = Path(
     os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
@@ -67,6 +72,8 @@ class Settings:
     start_hidden: bool = False
     enable_tray: bool = True
     show_in_taskbar: bool = True
+    notify_enabled: bool = True
+    notify_threshold: float = DEFAULT_NOTIFY_THRESHOLD
     window_x: int = -1
     window_y: int = -1
 
@@ -81,6 +88,8 @@ class Settings:
             "start_hidden": self.start_hidden,
             "enable_tray": self.enable_tray,
             "show_in_taskbar": self.show_in_taskbar,
+            "notify_enabled": self.notify_enabled,
+            "notify_threshold": self.notify_threshold,
             "window_x": self.window_x,
             "window_y": self.window_y,
         }
@@ -104,6 +113,14 @@ def _coerce(raw: dict[str, Any]) -> Settings:
         except (TypeError, ValueError):
             return -1
 
+    threshold = raw.get("notify_threshold", defaults.notify_threshold)
+    try:
+        threshold = min(
+            MAX_NOTIFY_THRESHOLD, max(MIN_NOTIFY_THRESHOLD, float(threshold))
+        )
+    except (TypeError, ValueError):
+        threshold = defaults.notify_threshold
+
     return Settings(
         poll_seconds=poll,
         always_on_top=flag("always_on_top", defaults.always_on_top),
@@ -111,6 +128,8 @@ def _coerce(raw: dict[str, Any]) -> Settings:
         start_hidden=flag("start_hidden", defaults.start_hidden),
         enable_tray=flag("enable_tray", defaults.enable_tray),
         show_in_taskbar=flag("show_in_taskbar", defaults.show_in_taskbar),
+        notify_enabled=flag("notify_enabled", defaults.notify_enabled),
+        notify_threshold=threshold,
         window_x=coord("window_x"),
         window_y=coord("window_y"),
     )

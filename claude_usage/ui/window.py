@@ -79,12 +79,14 @@ class CardWindow(Gtk.Window):
         on_toggle_week: Callable[[], None],
         on_quit: Callable[[], None],
         on_toggle_on_top: Callable[[], None],
+        on_toggle_notify: Callable[[], None],
     ) -> None:
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self._on_refresh = on_refresh
         self._on_toggle_week = on_toggle_week
         self._on_quit = on_quit
         self._on_toggle_on_top = on_toggle_on_top
+        self._on_toggle_notify = on_toggle_notify
         self._rows: dict[str, UsageRow] = {}
 
         self.set_name("card-window")
@@ -259,6 +261,7 @@ class CardWindow(Gtk.Window):
             ("Atualizar agora", lambda _i: self._on_refresh()),
             ("Mostrar/ocultar a semana", lambda _i: self._on_toggle_week()),
             ("Alternar sempre no topo", lambda _i: self._on_toggle_on_top()),
+            ("Alternar aviso de limite", lambda _i: self._on_toggle_notify()),
             ("Esconder", lambda _i: self.hide()),
             ("Sair", lambda _i: self._on_quit()),
         ):

@@ -186,6 +186,30 @@ class SettingsTest(unittest.TestCase):
 
         self.assertEqual(load_settings(self.path), Settings())
 
+    def test_notify_settings_round_trip(self):
+        self.assertTrue(Settings().notify_enabled)
+        self.assertEqual(Settings().notify_threshold, 80.0)
+        save_settings(
+            Settings(notify_enabled=False, notify_threshold=65.0), self.path
+        )
+
+        loaded = load_settings(self.path)
+
+        self.assertFalse(loaded.notify_enabled)
+        self.assertEqual(loaded.notify_threshold, 65.0)
+
+    def test_clamps_an_out_of_range_threshold(self):
+        self.path.write_text('{"notify_threshold": 500}', encoding="utf-8")
+
+        self.assertEqual(load_settings(self.path).notify_threshold, 100.0)
+
+    def test_ignores_a_junk_threshold(self):
+        self.path.write_text('{"notify_threshold": "muito"}', encoding="utf-8")
+
+        self.assertEqual(
+            load_settings(self.path).notify_threshold, Settings().notify_threshold
+        )
+
 
 class PollerTest(unittest.TestCase):
     def test_delivers_a_snapshot_then_stops(self):

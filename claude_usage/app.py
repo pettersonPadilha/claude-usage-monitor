@@ -13,7 +13,10 @@ gi.require_version("Gtk", "3.0")
 
 from gi.repository import GLib, Gtk  # noqa: E402
 
+from .alerts import AlertTracker  # noqa: E402
 from .config import (  # noqa: E402
+    MAX_NOTIFY_THRESHOLD,
+    MIN_NOTIFY_THRESHOLD,
     MIN_POLL_SECONDS,
     Settings,
     load_settings,
@@ -22,6 +25,7 @@ from .config import (  # noqa: E402
 from .history import SampleHistory  # noqa: E402
 from .model import UsageSnapshot  # noqa: E402
 from .poller import UsagePoller  # noqa: E402
+from .ui.notify import Notifier  # noqa: E402
 from .ui.tray import Tray  # noqa: E402
 from .ui.window import CardWindow, load_css, setup_application_identity  # noqa: E402
 from .viewmodel import build_card  # noqa: E402
@@ -50,9 +54,16 @@ class UsageApp:
             on_toggle_week=self.toggle_week,
             on_quit=self.quit,
             on_toggle_on_top=self.toggle_on_top,
+            on_toggle_notify=self.toggle_notify,
         )
         self._tray = Tray(self.toggle_window, self.refresh_now, self.quit) \
             if self._settings.enable_tray else None
+
+        self._notifier = Notifier()
+        self._alerts = AlertTracker(
+            threshold=self._settings.notify_threshold,
+            enabled=self._settings.notify_enabled,
+        )
 
         self._poller = UsagePoller(
             on_result=self._on_snapshot,
@@ -81,6 +92,7 @@ class UsageApp:
         self._persist_position()
         self._poller.stop()
         self._history.save()
+        self._notifier.close()
         Gtk.main_quit()
 
     # --- data ------------------------------------------------------------
@@ -91,7 +103,13 @@ class UsageApp:
         self._history.record(snapshot)
         self._history.save()
         self._render()
+        self._notify_alerts(snapshot)
         return GLib.SOURCE_REMOVE
+
+    def _notify_alerts(self, snapshot: UsageSnapshot) -> None:
+        for alert in self._alerts.evaluate(snapshot):
+            log.info("Alerta: %s — %s", alert.title, alert.body)
+            self._notifier.send(alert)
 
     def _on_error(self, message: str, needs_login: bool) -> bool:
         log.warning("Usage fetch failed: %s", message)
@@ -129,6 +147,13 @@ class UsageApp:
     def toggle_on_top(self) -> None:
         self._update_settings(always_on_top=not self._settings.always_on_top)
         self._window.set_keep_above(self._settings.always_on_top)
+
+    def toggle_notify(self) -> None:
+        self._update_settings(notify_enabled=not self._settings.notify_enabled)
+        self._alerts.configure(
+            threshold=self._settings.notify_threshold,
+            enabled=self._settings.notify_enabled,
+        )
 
     def toggle_window(self) -> None:
         if self._window.get_visible():
@@ -170,6 +195,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--no-tray", action="store_true", help="Desativa o indicador de painel"
     )
+    parser.add_argument(
+        "--no-notify", action="store_true", help="Desativa o aviso de limite"
+    )
+    parser.add_argument(
+        "--notify-threshold",
+        type=float,
+        default=None,
+        metavar="PERCENT",
+        help="Percentual que dispara o aviso (padrão 80)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Log detalhado")
     args = parser.parse_args(argv)
 
@@ -187,5 +222,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         settings = settings.with_changes(start_hidden=True)
     if args.no_tray:
         settings = settings.with_changes(enable_tray=False)
+    if args.no_notify:
+        settings = settings.with_changes(notify_enabled=False)
+    if args.notify_threshold is not None:
+        settings = settings.with_changes(
+            notify_threshold=min(
+                MAX_NOTIFY_THRESHOLD,
+                max(MIN_NOTIFY_THRESHOLD, args.notify_threshold),
+            )
+        )
 
     return UsageApp(settings).run()
