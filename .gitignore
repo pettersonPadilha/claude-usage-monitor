@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local state written by the app (never belongs in the repo)
+config.json
+history.json
+*.json.tmp
+
+# Reference mockups and scratch screenshots
+Captura de Tela *.png
+Screenshot *.png

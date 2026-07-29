@@ -1,0 +1,141 @@
+/* Dark card styling for the Claude usage monitor.
+ *
+ * Selectors are scoped under #card and repeated for :backdrop so the
+ * system theme cannot recolour the card when the window loses focus.
+ */
+
+#card-window,
+#card-window:backdrop {
+  background-color: transparent;
+}
+
+#card,
+#card:backdrop {
+  background-color: #1c1c1c;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+#rail,
+#rail:backdrop {
+  background-color: #131313;
+  border-radius: 13px 0 0 13px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#rail button,
+#rail button:backdrop {
+  background: none;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  padding: 5px;
+  min-width: 0;
+  min-height: 0;
+  color: #6f6f6f;
+}
+
+#rail button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #e6e6e6;
+}
+
+#card label.brand,
+#card label.brand:backdrop {
+  color: #d9784f;
+  font-size: 17px;
+  padding-bottom: 2px;
+}
+
+#card label.app-title,
+#card label.app-title:backdrop {
+  color: #f4f4f4;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+#card label.badge,
+#card label.badge:backdrop {
+  color: #cfcfcf;
+  background-color: #2b2b2b;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#card label.row-title,
+#card label.row-title:backdrop {
+  color: #ededed;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#card label.metric,
+#card label.metric:backdrop {
+  color: #9b9b9b;
+  font-size: 11px;
+}
+
+#card label.status,
+#card label.status:backdrop {
+  color: #c8913f;
+  font-size: 11px;
+}
+
+/* --- progress bar ------------------------------------------------------- */
+
+#card .bar-track,
+#card .bar-track:backdrop {
+  background-color: rgba(255, 255, 255, 0.10);
+  background-image: none;
+  border-radius: 6px;
+}
+
+#card .bar-fill,
+#card .bar-fill:backdrop,
+#card .dot,
+#card .dot:backdrop {
+  background-image: none;
+  border-radius: 6px;
+  background-color: #d9784f;
+}
+
+#card .dot,
+#card .dot:backdrop {
+  border-radius: 5px;
+}
+
+#card .bar-marker,
+#card .bar-marker:backdrop {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* --- severity ----------------------------------------------------------- */
+
+/* Claude orange up to 75%, then amber, then red. */
+#card .severity-normal,
+#card .severity-normal:backdrop {
+  background-color: #d9784f;
+}
+
+#card .severity-warning,
+#card .severity-warning:backdrop {
+  background-color: #f5ae33;
+}
+
+#card .severity-critical,
+#card .severity-critical:backdrop {
+  background-color: #e5484d;
+}
+
+/* --- stale data --------------------------------------------------------- */
+
+.stale #card label.metric,
+.stale #card label.row-title,
+.stale #card label.app-title {
+  opacity: 0.5;
+}
