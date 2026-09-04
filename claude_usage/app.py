@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import signal
+import sys
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -15,6 +16,9 @@ from gi.repository import GLib, Gtk  # noqa: E402
 
 from .alerts import AlertTracker  # noqa: E402
 from .config import (  # noqa: E402
+    LOG_BACKUP_COUNT,
+    LOG_MAX_BYTES,
+    LOG_PATH,
     MAX_NOTIFY_THRESHOLD,
     MIN_NOTIFY_THRESHOLD,
     MIN_POLL_SECONDS,
@@ -28,7 +32,7 @@ from .poller import UsagePoller  # noqa: E402
 from .ui.notify import Notifier  # noqa: E402
 from .ui.tray import Tray  # noqa: E402
 from .ui.window import CardWindow, load_css, setup_application_identity  # noqa: E402
-from .viewmodel import build_card  # noqa: E402
+from .viewmodel import CardView, build_card, empty_card  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +127,26 @@ class UsageApp:
         return GLib.SOURCE_CONTINUE
 
     def _render(self) -> None:
-        view = build_card(
+        """Redesenha o card. Nunca levanta exceção — ver o comentário abaixo."""
+        try:
+            view = self._build_view()
+        except Exception:
+            # Um quadro ruim não pode derrubar o resto. O GLib remove um
+            # timeout cuja função levanta exceção, então deixar isto escapar
+            # mataria o tique de 20s: os contadores param e o card fica preso
+            # no último quadro desenhado para sempre.
+            log.exception("Falhei ao montar o card")
+            view = empty_card("Erro ao montar o card. Veja o log.")
+
+        try:
+            self._window.render(view)
+            if self._tray is not None:
+                self._tray.update(view)
+        except Exception:
+            log.exception("Falhei ao desenhar o card")
+
+    def _build_view(self) -> CardView:
+        return build_card(
             snapshot=self._snapshot,
             history=self._history,
             now=datetime.now(timezone.utc),
@@ -131,9 +154,6 @@ class UsageApp:
             status_text=self._status_text,
             is_stale=self._is_stale,
         )
-        self._window.render(view)
-        if self._tray is not None:
-            self._tray.update(view)
 
     # --- actions ---------------------------------------------------------
     def refresh_now(self) -> None:
@@ -179,6 +199,26 @@ class UsageApp:
             self._update_settings(window_x=x, window_y=y)
 
 
+def _log_handlers() -> list[logging.Handler]:
+    """Log na tela e em arquivo; sem o arquivo, um atalho do menu não deixa rastro."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        from logging.handlers import RotatingFileHandler
+
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(
+                LOG_PATH,
+                maxBytes=LOG_MAX_BYTES,
+                backupCount=LOG_BACKUP_COUNT,
+                encoding="utf-8",
+            )
+        )
+    except OSError as exc:  # Não poder gravar log não impede o app de subir.
+        print(f"[monitor] sem log em arquivo: {exc}", file=sys.stderr)
+    return handlers
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     import argparse
 
@@ -211,6 +251,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=_log_handlers(),
     )
 
     settings = load_settings()

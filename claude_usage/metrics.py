@@ -5,6 +5,7 @@ Nothing here touches the network, disk or GTK, so it is all unit tested.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Sequence
@@ -14,6 +15,13 @@ from .config import BURN_LOOKBACK, MIN_BURN_SAMPLES
 SECONDS_PER_HOUR = 3600.0
 MIN_BURN_ELAPSED_SECONDS = 45.0
 FULL_PERCENT = 100.0
+
+# Até onde uma projeção ainda quer dizer algo. Uma inclinação positiva
+# minúscula — ruído de ponto flutuante numa série parada — projeta séculos, e
+# `timedelta` estoura muito antes disso. Além do horizonte a janela não está
+# andando, e é isso que o card deve dizer.
+MAX_PROJECTION = timedelta(days=365)
+MAX_PROJECTION_HOURS = MAX_PROJECTION.total_seconds() / SECONDS_PER_HOUR
 
 # A sample is a reading of one window's percentage at a point in time.
 Sample = tuple[datetime, float]
@@ -79,6 +87,13 @@ def burn_rate_per_hour(
     return covariance / variance
 
 
+def _duration_from_hours(hours: float) -> Optional[timedelta]:
+    """Duração para `hours`, ou None quando é longe demais para significar algo."""
+    if not math.isfinite(hours) or hours > MAX_PROJECTION_HOURS:
+        return None
+    return timedelta(hours=hours)
+
+
 @dataclass(frozen=True)
 class Projection:
     """Forecast for one window given its current burn rate."""
@@ -111,7 +126,7 @@ def project(
     elif burn is None or burn <= 0:
         to_full = None
     else:
-        to_full = timedelta(hours=remaining / burn)
+        to_full = _duration_from_hours(remaining / burn)
 
     return Projection(burn_per_hour=burn, time_to_full=to_full, time_to_reset=to_reset)
 
