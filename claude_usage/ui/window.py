@@ -206,6 +206,17 @@ class CardWindow(Gtk.Window):
         else:
             context.remove_class("stale")
 
+        # O estado da mensagem vem antes das linhas de propósito. Ela é o
+        # "Carregando uso…" do primeiro quadro, e se alguma coisa lá embaixo
+        # levantar exceção o card não pode continuar dizendo que está
+        # carregando — foi assim que ele já ficou preso nessa frase por horas,
+        # com o poller buscando os dados direitinho o tempo todo.
+        if view.status_text:
+            self._status.set_text(view.status_text)
+            self._status.show()
+        else:
+            self._status.hide()
+
         if view.plan_label:
             self._badge.set_text(view.plan_label)
             self._badge.show()
@@ -219,20 +230,18 @@ class CardWindow(Gtk.Window):
                 row = UsageRow()
                 self._rows[row_view.key] = row
                 self._rows_box.pack_start(row, False, False, 0)
+                # `show_all` só na criação: repetido a cada quadro, ele
+                # desfaz o `set_visible(False)` que a barra usa para esconder
+                # o preenchimento quando a janela está em 0%.
+                row.show_all()
             row.update(row_view)
             self._rows_box.reorder_child(row, index)
-            row.show_all()
+            row.show()
             seen.add(row_view.key)
 
         for key, row in self._rows.items():
             if key not in seen:
                 row.hide()
-
-        if view.status_text:
-            self._status.set_text(view.status_text)
-            self._status.show()
-        else:
-            self._status.hide()
 
     def current_position(self) -> tuple[int, int]:
         try:

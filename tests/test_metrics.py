@@ -120,6 +120,31 @@ class ProjectionTest(unittest.TestCase):
 
         self.assertEqual(projection.time_to_reset, timedelta(0))
 
+    def test_a_burn_of_float_noise_does_not_overflow(self):
+        # Percentuais que só variam na última casa decimal davam uma
+        # inclinação positiva minúscula, e `timedelta` estourava: o card
+        # ficava preso em "Carregando uso…" para sempre.
+        samples = [
+            (NOW - timedelta(minutes=40 - index * 10), 7.0 + index * 1e-12)
+            for index in range(5)
+        ]
+
+        projection = project(7.0, NOW + timedelta(days=6), NOW, samples)
+
+        self.assertIsNone(projection.time_to_full)
+        self.assertEqual(format_runs_out(projection), "Acaba em —")
+
+    def test_a_projection_past_the_horizon_reads_as_no_projection(self):
+        # 0,0015 ponto por hora leva séculos para encher a janela.
+        samples = [
+            (NOW - timedelta(minutes=40), 10.0),
+            (NOW, 10.001),
+        ]
+
+        projection = project(10.0, NOW + timedelta(days=6), NOW, samples)
+
+        self.assertIsNone(projection.time_to_full)
+
 
 class FormattingTest(unittest.TestCase):
     def test_duration_variants(self):

@@ -54,6 +54,12 @@ DATA_DIR = Path(
     os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
 ) / APP_ID
 HISTORY_PATH = DATA_DIR / "history.json"
+# O app sobe por atalho do menu, então stderr não vai a lugar nenhum. Sem um
+# arquivo, uma exceção num quadro do card não deixa rastro — e foi exatamente
+# isso que já custou horas de card congelado sem nenhuma pista do motivo.
+LOG_PATH = DATA_DIR / "monitor.log"
+LOG_MAX_BYTES = 512 * 1024
+LOG_BACKUP_COUNT = 1
 
 # The usage endpoint rate limits aggressive clients, and the percentages it
 # returns are whole numbers that move slowly, so polling hard buys nothing:
