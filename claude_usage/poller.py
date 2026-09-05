@@ -28,6 +28,13 @@ ERROR_BACKOFF_SECONDS = 20
 THROTTLE_BASE_SECONDS = 60.0
 THROTTLE_MAX_SECONDS = 1800.0
 
+# Um token expirado é renovado pelo próprio CLI do Claude, e o fetch relê o
+# arquivo de credenciais toda vez — então esperar o intervalo cheio deixa o
+# card preso no último valor por vários minutos à toa. Tentamos de novo em
+# 30s e vamos dobrando até o intervalo normal, para não martelar a API caso o
+# refresh token também tenha morrido e ninguém esteja lá para refazer o login.
+LOGIN_RETRY_BASE_SECONDS = 30.0
+
 
 class UsagePoller:
     """Fetches usage on an interval until stopped."""
@@ -49,6 +56,7 @@ class UsagePoller:
         self._stopped = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._throttle_streak = 0
+        self._login_streak = 0
 
     def start(self) -> None:
         if self._thread is not None:
@@ -78,18 +86,35 @@ class UsagePoller:
         except UsageError as exc:
             if exc.is_throttled:
                 return self._handle_throttle(exc)
-            message, needs_login = str(exc), exc.needs_login
-            self._dispatch(lambda: self._on_error(message, needs_login))
+            if exc.needs_login:
+                return self._handle_login_expiry(exc)
+            self._login_streak = 0
+            message = str(exc)
+            self._dispatch(lambda: self._on_error(message, False))
             return float(max(ERROR_BACKOFF_SECONDS, self._interval()))
         except Exception as exc:  # Never let the thread die on a surprise.
             log.exception("Unexpected error while fetching usage")
+            self._login_streak = 0
             message = f"Erro inesperado: {exc}"
             self._dispatch(lambda: self._on_error(message, False))
             return float(max(ERROR_BACKOFF_SECONDS, self._interval()))
 
         self._throttle_streak = 0
+        self._login_streak = 0
         self._dispatch(lambda: self._on_result(snapshot))
         return float(self._interval())
+
+    def _handle_login_expiry(self, exc: UsageError) -> float:
+        """Retry soon after an expired token, backing off if it never renews."""
+        self._login_streak += 1
+        delay = min(
+            LOGIN_RETRY_BASE_SECONDS * (2 ** (self._login_streak - 1)),
+            float(max(ERROR_BACKOFF_SECONDS, self._interval())),
+        )
+
+        message = f"{exc} Nova tentativa em {format_wait(delay)}."
+        self._dispatch(lambda: self._on_error(message, True))
+        return delay
 
     def _handle_throttle(self, exc: UsageError) -> float:
         """Grow the wait on every consecutive 429 instead of insisting."""

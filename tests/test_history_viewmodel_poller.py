@@ -13,7 +13,11 @@ from claude_usage.config import (
 )
 from claude_usage.history import SampleHistory
 from claude_usage.model import snapshot_from_payload
-from claude_usage.poller import THROTTLE_MAX_SECONDS, UsagePoller
+from claude_usage.poller import (
+    LOGIN_RETRY_BASE_SECONDS,
+    THROTTLE_MAX_SECONDS,
+    UsagePoller,
+)
 from claude_usage.viewmodel import build_card
 
 NOW = datetime(2026, 7, 25, 18, 0, tzinfo=timezone.utc)
@@ -258,7 +262,7 @@ class PollerTest(unittest.TestCase):
         poller.start()
 
         self.assertTrue(done.wait(5))
-        self.assertEqual(errors[0], ("expired", True))
+        self.assertEqual(errors[0], ("expired Nova tentativa em 30s.", True))
 
     def test_survives_unexpected_exceptions(self):
         done = threading.Event()
@@ -285,8 +289,6 @@ class PollerTest(unittest.TestCase):
         self.assertIn("kaboom", errors[0])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ThrottlingTest(unittest.TestCase):
@@ -365,3 +367,63 @@ class ThrottlingTest(unittest.TestCase):
         poller = self._poller(lambda: (_ for _ in ()).throw(UsageError("falhou")))
 
         self.assertEqual(poller._poll_once(), 60.0)
+
+
+class LoginExpiryTest(unittest.TestCase):
+    """An expired token is renewed by the CLI, so retry sooner than usual."""
+
+    def _poller(self, fetcher, messages=None, interval=300):
+        return UsagePoller(
+            on_result=lambda snapshot: None,
+            on_error=lambda message, needs_login: (
+                messages.append(message) if messages is not None else None
+            ),
+            dispatch=lambda fn: fn(),
+            interval_provider=lambda: interval,
+            fetcher=fetcher,
+        )
+
+    @staticmethod
+    def _expired():
+        return (_ for _ in ()).throw(
+            UsageError("Login expirado.", needs_login=True)
+        )
+
+    def test_first_retry_is_short(self):
+        poller = self._poller(self._expired)
+
+        self.assertEqual(poller._poll_once(), LOGIN_RETRY_BASE_SECONDS)
+
+    def test_backoff_doubles_and_stops_at_the_poll_interval(self):
+        poller = self._poller(self._expired)
+
+        delays = [poller._poll_once() for _ in range(6)]
+
+        self.assertEqual(delays, [30.0, 60.0, 120.0, 240.0, 300.0, 300.0])
+
+    def test_a_success_resets_the_streak(self):
+        responses = [True, True, False, True]
+
+        def fetcher():
+            if responses.pop(0):
+                return self._expired()
+            return make_snapshot()
+
+        poller = self._poller(fetcher)
+        delays = [poller._poll_once() for _ in range(4)]
+
+        self.assertEqual(delays, [30.0, 60.0, 300.0, 30.0])
+
+    def test_message_tells_the_user_when_it_retries(self):
+        messages = []
+        poller = self._poller(self._expired, messages)
+
+        poller._poll_once()
+
+        self.assertEqual(
+            messages[0], "Login expirado. Nova tentativa em 30s."
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
